@@ -1,0 +1,12 @@
+from pyspark.sql.functions import col, when
+
+# Replace all null values with empty strings, then filter out unwanted rows
+final_cleaned_df = fully_cleaned_df.select(
+    *[
+        when(col(c).isNotNull(), col(c)).alias(c) for c in fully_cleaned_df.columns
+    ]
+).na.drop(how="all")  # Drop rows where all columns are null
+
+# Display the final cleaned DataFrame
+final_cleaned_df.printSchema()
+final_cleaned_df.show(truncate=False)
