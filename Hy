@@ -1,0 +1,13 @@
+def secondary_clean(item):
+    if isinstance(item, dict):
+        # Iterate through the dictionary and remove invalid values
+        cleaned_dict = {k: secondary_clean(v) for k, v in item.items() if v not in [None, "", [], {}, "null"]}
+        return cleaned_dict if cleaned_dict else None  # Remove empty dictionaries
+
+    elif isinstance(item, list):
+        # Iterate through the list and remove invalid values
+        cleaned_list = [secondary_clean(v) for v in item if v not in [None, "", [], {}, "null"]]
+        return cleaned_list if cleaned_list else None  # Remove empty lists
+
+    # For all other types, return the item itself unless it's invalid
+    return item if item not in [None, "", "null"] else None
