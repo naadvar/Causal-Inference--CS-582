@@ -1,0 +1,39 @@
+import json
+
+# Define a function to clean nulls explicitly
+def remove_nulls(data):
+    if isinstance(data, dict):
+        return {
+            k: remove_nulls(v) for k, v in data.items() if v not in [None, "", [], {}, "null"]
+        }
+    elif isinstance(data, list):
+        return [remove_nulls(v) for v in data if v not in [None, "", [], {}, "null"]]
+    else:
+        return data
+
+# Convert the DataFrame to an RDD
+json_rdd = exp_2.toJSON().map(lambda x: json.loads(x))
+
+# Apply the cleaning functions
+cleaned_rdd = json_rdd.map(lambda x: remove_nulls(x))
+
+# Convert back to JSON strings
+cleaned_json_rdd = cleaned_rdd.map(lambda x: json.dumps(x))
+
+# Load the cleaned JSON strings into a DataFrame
+cleaned_df = spark.read.json(cleaned_json_rdd)
+
+# Display the cleaned DataFrame
+cleaned_df.printSchema()
+cleaned_df.show(truncate=False)
+
+from pyspark.sql.functions import col
+
+# Replace all null values with a default (empty string or 0, for example)
+cleaned_df = cleaned_df.fillna("")
+
+# Drop rows or columns where nulls still persist
+cleaned_df = cleaned_df.na.drop()
+
+# Display the fully cleaned DataFrame
+cleaned_df.show(truncate=False)
