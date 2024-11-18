@@ -1,0 +1,36 @@
+import re
+
+def clean_json(data):
+    """
+    Recursively cleans JSON by removing:
+    - Keys with None or null values
+    - Keys with empty strings or spaces
+    - Empty lists and dictionaries
+    """
+    if isinstance(data, dict):
+        cleaned_dict = {}
+        for key, value in data.items():
+            # Clean the key
+            cleaned_key = re.sub(r"\s+", " ", key).strip()
+
+            # Clean the value recursively
+            cleaned_value = clean_json(value)
+
+            # Only add valid key-value pairs
+            if cleaned_key and cleaned_value not in [None, "", [], {}, "null"]:
+                cleaned_dict[cleaned_key] = cleaned_value
+        return cleaned_dict if cleaned_dict else None  # Remove empty dictionaries
+
+    elif isinstance(data, list):
+        # Clean each item in the list
+        cleaned_list = [clean_json(item) for item in data if item not in [None, "", [], {}, "null"]]
+        return cleaned_list if cleaned_list else None  # Remove empty lists
+
+    elif isinstance(data, str):
+        # Strip spaces and remove empty strings or "null"
+        cleaned_string = re.sub(r"\s+", " ", data).strip()
+        return cleaned_string if cleaned_string.lower() != "null" else None
+
+    else:
+        # For other types, return the value unless it's None
+        return data if data is not None else None
