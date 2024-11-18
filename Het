@@ -1,0 +1,32 @@
+import re
+
+def clean_structure(item):
+    if isinstance(item, dict):
+        cleaned_dict = {}
+        for k, v in item.items():
+            # Strip whitespace from keys
+            cleaned_key = re.sub(r"\s+", " ", k).strip()
+
+            # Recursively clean the value
+            cleaned_value = clean_structure(v)
+
+            # Add to the cleaned dictionary only if the key and value are valid
+            if cleaned_key and cleaned_value not in [None, "", [], {}]:
+                cleaned_dict[cleaned_key] = cleaned_value
+        return cleaned_dict if cleaned_dict else None  # Remove empty dictionaries
+
+    elif isinstance(item, list):
+        # Recursively clean each element and remove empty/null elements
+        cleaned_list = [clean_structure(i) for i in item if i not in [None, "", [], {}]]
+        return cleaned_list if cleaned_list else None  # Remove empty lists
+
+    elif isinstance(item, str):
+        # Replace multiple spaces with a single space
+        cleaned_item = re.sub(r"\s+", " ", item).strip()
+
+        # Treat strings that are empty or explicitly "null" as invalid
+        return None if cleaned_item == "" or cleaned_item.lower() == "null" else cleaned_item
+
+    else:
+        # For other data types (int, float, etc.), return the item as is unless it's None
+        return None if item is None else item
