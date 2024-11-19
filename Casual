@@ -1,0 +1,67 @@
+import json
+
+def clean_json(data):
+    """
+    Recursively clean JSON objects:
+    - Remove None, null, empty strings, empty lists, and empty dictionaries.
+    """
+    if isinstance(data, dict):
+        return {
+            k: clean_json(v)
+            for k, v in data.items()
+            if v not in [None, "", [], {}, "null"] and (not isinstance(v, str) or v.strip())
+        } or None
+
+    elif isinstance(data, list):
+        return [
+            clean_json(v)
+            for v in data
+            if v not in [None, "", [], {}, "null"] and (not isinstance(v, str) or v.strip())
+        ] or None
+
+    elif isinstance(data, str):
+        # Strip strings and remove empty/whitespace/null-like values
+        cleaned_str = data.strip()
+        return cleaned_str if cleaned_str and cleaned_str.lower() != "null" else None
+
+    else:
+        return data if data is not None else None
+
+# Clean the RDD
+json_rdd = exp_2.toJSON().map(lambda x: clean_json(json.loads(x)))
+
+
+def flatten_json(data, prefix=''):
+    """
+    Flatten nested JSON objects for dynamic schema creation.
+    """
+    items = []
+    if isinstance(data, dict):
+        for k, v in data.items():
+            items.extend(flatten_json(v, f"{prefix}{k}_"))
+    elif isinstance(data, list):
+        for i, v in enumerate(data):
+            items.extend(flatten_json(v, f"{prefix}{i}_"))
+    else:
+        items.append((prefix[:-1], data))  # Remove trailing underscore
+    return items
+
+# Flatten the cleaned JSON RDD
+flattened_rdd = json_rdd.map(lambda x: dict(flatten_json(x)))
+
+from pyspark.sql.types import StructType, StructField, StringType
+
+# Infer schema dynamically
+fields = [
+    StructField(field_name, StringType(), True)
+    for field_name in flattened_rdd.first().keys()
+]
+dynamic_schema = StructType(fields)
+
+
+# Create DataFrame from flattened RDD with the dynamic schema
+cleaned_df = spark.createDataFrame(flattened_rdd, schema=dynamic_schema)
+
+# Show the cleaned data
+cleaned_df.printSchema()
+cleaned_df.show(truncate=False)
