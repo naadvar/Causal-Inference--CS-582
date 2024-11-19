@@ -1,0 +1,24 @@
+# Define the recursive cleaning function
+def clean_json(data):
+    if isinstance(data, dict):
+        return {
+            k: clean_json(v)
+            for k, v in data.items()
+            if v not in [None, "", [], {}, "null"] and (not isinstance(v, str) or v.strip())
+        } or None
+    elif isinstance(data, list):
+        return [
+            clean_json(item)
+            for item in data
+            if item not in [None, "", [], {}, "null"] and (not isinstance(item, str) or item.strip())
+        ] or None
+    elif isinstance(data, str):
+        # Strip strings and remove "null"
+        cleaned_str = data.strip()
+        return cleaned_str if cleaned_str and cleaned_str.lower() != "null" else None
+    else:
+        # Return non-empty values directly
+        return data if data is not None else None
+
+# Apply the cleaning function to each JSON object
+cleaned_rdd = json_rdd.map(lambda x: json.dumps(clean_json(json.loads(x))))
