@@ -1,0 +1,45 @@
+from pyspark.sql import SparkSession
+import re
+from pyspark.sql import Row
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("CleanDeeplyNestedJSON").getOrCreate()
+
+# Load the JSON into a PySpark DataFrame
+df = spark.read.json("your_file.json")
+
+# Define the cleaning function
+def clean_spark_row(data):
+    """
+    Recursively clean PySpark Row, dict, or list by removing:
+    - keys with null values
+    - keys with string values containing only spaces
+    """
+    if isinstance(data, Row):
+        # Convert Row to dictionary and clean it
+        data = data.asDict()
+
+    if isinstance(data, dict):
+        # Clean dictionary recursively
+        return {k: clean_spark_row(v) for k, v in data.items()
+                if v is not None and (not isinstance(v, str) or not re.fullmatch(r'\s*', v))}
+    elif isinstance(data, list):
+        # Clean each item in a list
+        return [clean_spark_row(item) for item in data]
+    else:
+        # Return non-dict/non-list types as-is
+        return data
+
+# Convert PySpark DataFrame to Python objects (list of rows)
+data = df.collect()
+
+# Apply cleaning function to each row
+cleaned_data = [clean_spark_row(row) for row in data]
+
+# Save cleaned data back to a JSON file
+import json
+with open("cleaned_file.json", "w") as f:
+    json.dump(cleaned_data, f, indent=4)
+
+# Print cleaned data for verification
+print(json.dumps(cleaned_data, indent=4))
