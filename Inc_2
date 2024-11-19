@@ -1,0 +1,126 @@
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import col, regexp_replace, trim
+import json
+from typing import Dict, Any
+import re
+
+def clean_string(value: str) -> str:
+    """
+    Clean a string by removing multiple spaces
+    
+    Args:
+        value: Input string
+    
+    Returns:
+        str: Cleaned string
+    """
+    # Replace multiple spaces with single space and trim
+    return re.sub(r'\s+', ' ', value.strip())
+
+def clean_json_data(json_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recursively clean a JSON dictionary by:
+    1. Removing keys with null, empty, or space-only values
+    2. Removing multiple spaces in strings
+    3. Cleaning keys to remove multiple spaces
+    
+    Args:
+        json_data: Input JSON dictionary
+    
+    Returns:
+        Dict: Cleaned JSON dictionary
+    """
+    if isinstance(json_data, dict):
+        cleaned_dict = {}
+        for key, value in json_data.items():
+            # Clean the key if it's a string
+            cleaned_key = clean_string(key) if isinstance(key, str) else key
+            
+            # Skip null, empty values, or space-only strings
+            if value is None or value == "" or (isinstance(value, str) and not value.strip()):
+                continue
+                
+            # Clean and process the value
+            if isinstance(value, str):
+                cleaned_value = clean_string(value)
+                if cleaned_value:  # Only add if not empty after cleaning
+                    cleaned_dict[cleaned_key] = cleaned_value
+            else:
+                cleaned_value = clean_json_data(value)
+                if cleaned_value not in ({}, [], None, ""):  # Only add if not empty
+                    cleaned_dict[cleaned_key] = cleaned_value
+                    
+        return cleaned_dict
+    
+    elif isinstance(json_data, list):
+        return [
+            clean_json_data(item) 
+            for item in json_data 
+            if item is not None and item != "" and item != {} and item != []
+        ]
+    
+    elif isinstance(json_data, str):
+        return clean_string(json_data)
+    
+    else:
+        return json_data
+
+def clean_spark_dataframe(df: DataFrame) -> DataFrame:
+    """
+    Clean a PySpark DataFrame by:
+    1. Removing columns with only null/empty values
+    2. Cleaning multiple spaces in string values
+    
+    Args:
+        df (DataFrame): Input PySpark DataFrame
+    
+    Returns:
+        DataFrame: Cleaned DataFrame
+    """
+    # Get all column names
+    columns = df.columns
+    cleaned_df = df
+    
+    # First pass: clean string values
+    for column in columns:
+        cleaned_df = cleaned_df.withColumn(
+            column,
+            when(col(column).isNull() | (trim(col(column).cast("string")) == ""), None)
+            .otherwise(
+                regexp_replace(
+                    trim(col(column).cast("string")),
+                    r"\s+",
+                    " "
+                )
+            )
+        )
+    
+    # Second pass: remove columns with all null values
+    non_empty_columns = []
+    for column in columns:
+        if cleaned_df.where(col(column).isNotNull()).count() > 0:
+            non_empty_columns.append(column)
+    
+    # Select only non-empty columns
+    final_df = cleaned_df.select(*non_empty_columns)
+    return final_df
+
+# Example usage:
+"""
+# Method 1: Clean JSON data directly
+with open('your_file.json', 'r') as file:
+    json_data = json.load(file)
+cleaned_json = clean_json_data(json_data)
+
+# Method 2: Clean Spark DataFrame
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("JSONCleaner").getOrCreate()
+
+# Read JSON into DataFrame
+df = spark.read.json("path_to_your_json")
+cleaned_df = clean_spark_dataframe(df)
+
+# Write cleaned data back to JSON if needed
+cleaned_df.write.json("cleaned_output.json")
+"""
