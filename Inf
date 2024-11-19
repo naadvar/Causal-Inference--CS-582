@@ -1,0 +1,59 @@
+# Extract JSON strings from the PySpark DataFrame column
+json_list = exp_2.select("experianResponse").rdd.map(lambda row: row.experianResponse if isinstance(row.experianResponse, str) else str(row.experianResponse)).collect()
+
+import json
+
+# Convert the JSON strings to dictionaries
+try:
+    json_data = [json.loads(item) for item in json_list]
+except Exception as e:
+    print(f"Error parsing JSON: {e}")
+    raise
+
+
+
+def clean_json(data):
+    """
+    Recursively clean JSON objects:
+    - Remove None, null, empty strings, whitespace-only strings, empty lists, and empty dictionaries.
+    """
+    if isinstance(data, dict):
+        cleaned_dict = {
+            k: clean_json(v)
+            for k, v in data.items()
+            if v not in [None, "", [], {}, "null"] and (not isinstance(v, str) or v.strip())
+        }
+        return cleaned_dict if cleaned_dict else None
+
+    elif isinstance(data, list):
+        cleaned_list = [
+            clean_json(v)
+            for v in data
+            if v not in [None, "", [], {}, "null"] and (not isinstance(v, str) or v.strip())
+        ]
+        return cleaned_list if cleaned_list else None
+
+    elif isinstance(data, str):
+        cleaned_str = data.strip()
+        return cleaned_str if cleaned_str and cleaned_str.lower() != "null" else None
+
+    else:
+        return data if data is not None else None
+
+# Apply the cleaning function
+cleaned_json_data = [clean_json(item) for item in json_data]
+
+
+
+# Convert the cleaned JSON data back to JSON strings
+cleaned_json_strings = [json.dumps(item) for item in cleaned_json_data]
+
+# Create an RDD from the cleaned JSON strings
+cleaned_rdd = spark.sparkContext.parallelize(cleaned_json_strings)
+
+# Read the cleaned JSON strings into a PySpark DataFrame
+cleaned_df = spark.read.json(cleaned_rdd)
+
+# Show the cleaned DataFrame
+cleaned_df.printSchema()
+cleaned_df.show(truncate=False)
