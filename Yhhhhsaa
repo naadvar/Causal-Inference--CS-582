@@ -19,6 +19,92 @@ cleaned_spark_df = spark.createDataFrame(cleaned_rows)
 
 cleaned_spark_df.show(truncate=False)
 cleaned_spark_df.printSchema()
+from pyspark.sql import SparkSession
+import pandas as pd
+import json
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("FlattenAndClean").getOrCreate()
+
+# Step 1: Load the JSON file into PySpark DataFrame
+df = spark.read.json("your_file.json")
+
+# Step 2: Get distinct `hour` and `minute` combinations for partitioning
+hour_minute_combinations = df.select("hour", "minute").distinct().collect()
+
+# Step 3: Define the Pandas cleaning and flattening functions
+def clean_pandas_row(data):
+    """
+    Recursively clean a dictionary or list by removing:
+    - keys with null values
+    - keys with string values containing only spaces
+    - keys with empty lists
+    """
+    if isinstance(data, dict):
+        return {k: clean_pandas_row(v) for k, v in data.items()
+                if v is not None and
+                (not isinstance(v, str) or v.strip()) and
+                (not isinstance(v, list) or len(v) > 0)}
+    elif isinstance(data, list):
+        return [clean_pandas_row(item) for item in data]
+    else:
+        return data
+
+def flatten_dict(d, parent_key='', sep='_'):
+    """
+    Flatten a nested dictionary into a single-level dictionary.
+    """
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+# Step 4: Process each (hour, minute) partition in Pandas
+cleaned_partitions = []
+
+for row in hour_minute_combinations:
+    hour, minute = row["hour"], row["minute"]
+    
+    # Filter the DataFrame by `hour` and `minute`
+    partition_df = df.filter((df.hour == hour) & (df.minute == minute))
+    
+    # Convert the partition to Pandas
+    pandas_df = partition_df.toPandas()
+    
+    # Convert Pandas DataFrame to a list of dictionaries and clean each row
+    cleaned_data = [clean_pandas_row(row) for row in pandas_df.to_dict(orient="records")]
+    
+    # Flatten the cleaned dictionaries
+    flattened_data = [flatten_dict(row) for row in cleaned_data]
+    
+    # Convert the flattened data back to a Pandas DataFrame
+    cleaned_pandas_df = pd.DataFrame(flattened_data)
+    
+    # Append the cleaned Pandas DataFrame to the list
+    cleaned_partitions.append(cleaned_pandas_df)
+
+# Step 5: Combine cleaned Pandas DataFrames into a single PySpark DataFrame
+# Convert each cleaned Pandas DataFrame to JSON and then load into PySpark
+rdds = [
+    spark.sparkContext.parallelize(json.loads(cleaned_pandas_df.to_json(orient="records"))) 
+    for cleaned_pandas_df in cleaned_partitions
+]
+cleaned_rdd = spark.sparkContext.union(rdds)
+
+# Create a PySpark DataFrame from the RDD
+cleaned_spark_df = spark.read.json(cleaned_rdd.map(json.dumps))
+
+# Step 6: Display the cleaned and flattened DataFrame
+cleaned_spark_df.show(truncate=False)
+cleaned_spark_df.printSchema()
+
+# Step 7: (Optional) Save the cleaned and flattened data
+cleaned_spark_df.write.json("cleaned_file.json", mode="overwrite")
+
 
 
 
