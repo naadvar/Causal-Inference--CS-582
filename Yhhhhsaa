@@ -1,0 +1,9 @@
+# Convert cleaned Pandas DataFrames to JSON strings
+json_strings = [cleaned_pandas_df.to_json(orient="records") for cleaned_pandas_df in cleaned_partitions]
+
+# Combine JSON strings into a single RDD
+rdd = spark.sparkContext.parallelize(json_strings)
+
+# Load the JSON data with multiline=True
+cleaned_spark_df = spark.read.option("multiline", "true").json(rdd)
+cleaned_spark_df.show(truncate=False)
