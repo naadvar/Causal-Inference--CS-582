@@ -57,3 +57,14 @@ cleaned_df = spark.read.json(cleaned_rdd)
 # Show the cleaned DataFrame
 cleaned_df.printSchema()
 cleaned_df.show(truncate=False)
+
+
+# Filter out empty strings or None values from the JSON list
+filtered_json_list = [item for item in json_list if item and isinstance(item, str) and item.strip()]
+
+# Convert the filtered JSON strings to Python dictionaries
+try:
+    json_data = [json.loads(item) for item in filtered_json_list]
+except json.JSONDecodeError as e:
+    print(f"Error parsing JSON: {e}")
+    raise
