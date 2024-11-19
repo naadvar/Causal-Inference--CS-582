@@ -34,3 +34,21 @@ def clean_json(data):
     else:
         # For other types, return the value unless it's None
         return data if data is not None else None
+
+
+
+# Export DataFrame to JSON
+json_rdd = exp_2.toJSON()
+json_rdd.saveAsTextFile("raw_data.json")
+
+# Clean JSON outside PySpark
+with open("raw_data.json", "r") as f:
+    data = [clean_json(json.loads(line)) for line in f]
+
+# Write cleaned data back to a file
+with open("cleaned_data.json", "w") as f:
+    f.writelines(json.dumps(record) + "\n" for record in data)
+
+# Reload the cleaned JSON into PySpark
+cleaned_df = spark.read.json("cleaned_data.json")
+cleaned_df.show(truncate=False)
