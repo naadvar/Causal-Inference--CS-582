@@ -7,3 +7,31 @@ rdd = spark.sparkContext.parallelize(json_strings)
 # Load the JSON data with multiline=True
 cleaned_spark_df = spark.read.option("multiline", "true").json(rdd)
 cleaned_spark_df.show(truncate=False)
+
+
+from pyspark.sql import Row
+
+# Convert cleaned Pandas DataFrames into PySpark DataFrames
+cleaned_rows = [Row(**row) for cleaned_pandas_df in cleaned_partitions for row in cleaned_pandas_df.to_dict(orient="records")]
+
+# Create PySpark DataFrame directly
+cleaned_spark_df = spark.createDataFrame(cleaned_rows)
+
+cleaned_spark_df.show(truncate=False)
+cleaned_spark_df.printSchema()
+
+
+
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+# Example Usage:
+flattened_data = [flatten_dict(row) for row in cleaned_data]
+cleaned_pandas_df = pd.DataFrame(flattened_data)
