@@ -1,0 +1,66 @@
+from pyspark.sql import SparkSession
+import json
+import re
+from pyspark.sql import Row
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("PartitionedDataCleaning").getOrCreate()
+
+# Step 1: Define the cleaning function
+def clean_spark_row(data):
+    """
+    Recursively clean PySpark Row, dict, or list by removing:
+    - keys with null values
+    - keys with string values containing only spaces
+    - keys with empty lists
+    """
+    if isinstance(data, Row):
+        # Convert Row to dictionary and clean it
+        data = data.asDict()
+
+    if isinstance(data, dict):
+        # Clean dictionary recursively
+        return {k: clean_spark_row(v) for k, v in data.items()
+                if v is not None and 
+                (not isinstance(v, str) or not re.fullmatch(r'\s*', v)) and
+                (not isinstance(v, list) or len(v) > 0)}
+    elif isinstance(data, list):
+        # Clean each item in a list
+        return [clean_spark_row(item) for item in data]
+    else:
+        # Return non-dict/non-list types as-is
+        return data
+
+# Step 2: Load the big JSON file into PySpark DataFrame
+df = spark.read.json("your_file.json")
+
+# Step 3: Get distinct `hour` values to partition the data
+hour_values = [row['hour'] for row in df.select("hour").distinct().collect()]  # Collect distinct hour values
+
+# Step 4: Process data partitioned by `hour`
+cleaned_partitions = []
+
+for hour in hour_values:
+    # Filter the DataFrame by `hour`
+    partition_df = df.filter(df.hour == hour)
+
+    # Convert the partition to RDD and clean rows
+    partition_rdd = partition_df.rdd.map(lambda row: clean_spark_row(row.asDict()))
+
+    # Convert the cleaned RDD back to DataFrame
+    cleaned_partition_df = spark.read.json(partition_rdd.map(json.dumps))  # Convert to JSON and read as DataFrame
+
+    # Append the cleaned partition to the list
+    cleaned_partitions.append(cleaned_partition_df)
+
+# Step 5: Union all cleaned partitions into a single DataFrame
+cleaned_df = cleaned_partitions[0]
+for partition_df in cleaned_partitions[1:]:
+    cleaned_df = cleaned_df.union(partition_df)
+
+# Step 6: Display the cleaned DataFrame
+cleaned_df.show(truncate=False)
+cleaned_df.printSchema()
+
+# Step 7: (Optional) Save cleaned DataFrame to a file
+cleaned_df.write.json("cleaned_file.json", mode="overwrite")
