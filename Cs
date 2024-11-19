@@ -1,0 +1,53 @@
+from pyspark.sql import Row
+
+def clean_json(data):
+    """
+    Recursively clean a JSON object by:
+    - Removing keys with None, empty strings, or invalid values
+    - Removing empty lists and dictionaries
+    """
+    if isinstance(data, dict):
+        # Recursively clean each key-value pair
+        return {k: clean_json(v) for k, v in data.items() if v not in [None, "", [], {}, "null"]}
+
+    elif isinstance(data, list):
+        # Recursively clean each item in the list
+        return [clean_json(item) for item in data if item not in [None, "", [], {}, "null"]]
+
+    elif isinstance(data, str):
+        # Strip whitespace and remove empty or "null" strings
+        cleaned_str = data.strip()
+        return cleaned_str if cleaned_str.lower() != "null" else None
+
+    else:
+        # Return non-empty values directly
+        return data
+
+
+import json
+
+# Convert PySpark DataFrame to RDD with JSON strings
+json_rdd = exp_2.toJSON().map(lambda x: json.loads(x))
+
+# Apply the cleaning function to each JSON object
+cleaned_rdd = json_rdd.map(clean_json)
+
+# Convert the cleaned RDD back to JSON strings
+cleaned_json_rdd = cleaned_rdd.map(lambda x: json.dumps(x))
+
+# Load the cleaned JSON back into a PySpark DataFrame
+cleaned_df = spark.read.json(cleaned_json_rdd)
+
+
+# Check the schema of the cleaned DataFrame
+cleaned_df.printSchema()
+
+# Show the cleaned data
+cleaned_df.show(truncate=False)
+
+
+# Replace None with empty strings or drop rows with all null values
+final_df = cleaned_df.fillna("").na.drop(how="all")
+
+# Show the final cleaned DataFrame
+final_df.show(truncate=False)
