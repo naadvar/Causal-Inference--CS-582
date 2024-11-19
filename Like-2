@@ -1,4 +1,17 @@
-import re
+import r
+
+from pyspark.sql.functions import col, lit, when
+
+# Replace all `null` values in string columns with empty strings
+cleaned_df = fully_cleaned_df.select(
+    *[when(col(c).isNotNull(), col(c)).otherwise(lit("")).alias(c) for c in fully_cleaned_df.columns]
+)
+
+# Drop rows where all columns are empty
+cleaned_df = cleaned_df.na.drop(how="all")
+
+# Display the cleaned DataFrame
+cleaned_df.show(truncate=False)
 
 def clean_json(data):
     """
