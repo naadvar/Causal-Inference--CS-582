@@ -1,0 +1,29 @@
+def clean_json(data):
+    """
+    Recursively clean a JSON object to remove:
+    - Keys with None or null values
+    - Keys with empty strings or whitespace-only strings
+    - Keys with empty lists or dictionaries
+    """
+    if isinstance(data, dict):
+        # Process each key-value pair recursively
+        cleaned_dict = {
+            k: clean_json(v)
+            for k, v in data.items()
+            if v not in [None, "", [], {}, "null"] and (not isinstance(v, str) or v.strip() != "")
+        }
+        return cleaned_dict if cleaned_dict else None  # Remove empty dictionaries
+
+    elif isinstance(data, list):
+        # Process each item in the list recursively
+        cleaned_list = [clean_json(item) for item in data if item not in [None, "", [], {}, "null"]]
+        return cleaned_list if cleaned_list else None  # Remove empty lists
+
+    elif isinstance(data, str):
+        # Remove strings that are empty, whitespace-only, or explicitly "null"
+        cleaned_str = data.strip()
+        return cleaned_str if cleaned_str and cleaned_str.lower() != "null" else None
+
+    else:
+        # Return other types (int, float, etc.) unless they are None
+        return data if data is not None else None
